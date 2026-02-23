@@ -7,11 +7,12 @@ use slint::ComponentHandle;
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows_sys::Win32::UI::Shell::{DragAcceptFiles, DragFinish, DragQueryFileW, HDROP};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CallWindowProcW, SetWindowLongPtrW, GWLP_WNDPROC, WM_DROPFILES, WNDPROC,
+    CallWindowProcW, ChangeWindowMessageFilterEx, SetWindowLongPtrW, GWLP_WNDPROC, MSGFLT_ALLOW,
+    WM_DROPFILES, WNDPROC,
 };
+use std::sync::OnceLock;
 
 slint::include_modules!();
-
 fn save_32bit_bmp(img: &DynamicImage, output_path: &Path) -> anyhow::Result<()> {
     let (width, height) = img.dimensions();
     let file = File::create(output_path)?;
@@ -89,33 +90,46 @@ fn process_file(path_str: &str, handle: AppWindow) {
     }
 }
 
-use std::sync::OnceLock;
 static APP_WINDOW_HANDLE: OnceLock<slint::Weak<AppWindow>> = OnceLock::new();
 static mut ORIGINAL_WNDPROC: WNDPROC = None;
 
+// wnd_proc에 디버그 로그 추가
 unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    if msg == WM_DROPFILES {
-        let hdrop = wparam as HDROP;
-        let mut path_buf = [0u16; 512];
-        unsafe {
-            let count = DragQueryFileW(hdrop, 0, path_buf.as_mut_ptr(), 512);
-            if count > 0 {
-                let path = String::from_utf16_lossy(&path_buf[..count as usize]);
-                if let Some(weak) = APP_WINDOW_HANDLE.get() {
-                    let weak_clone = weak.clone();
-                    let _ = slint::invoke_from_event_loop(move || {
-                        if let Some(ui) = weak_clone.upgrade() {
-                            process_file(&path, ui);
-                        }
-                    });
+    match msg {
+        WM_DROPFILES => {
+            println!("파일 드롭 감지됨! (WM_DROPFILES)"); // 디버그 로그
+            let hdrop = wparam as HDROP;
+            let mut path_buf = [0u16; 1024]; // 버퍼 크기 넉넉하게
+            unsafe {
+                // 0을 사용하여 첫 번째 파일만 가져옴
+                let len = DragQueryFileW(hdrop, 0, path_buf.as_mut_ptr(), 1024);
+                if len > 0 {
+                    let path = String::from_utf16_lossy(&path_buf[..len as usize]);
+                    println!("드롭된 파일 경로: {}", path); // 경로 확인
+
+                    if let Some(weak) = APP_WINDOW_HANDLE.get() {
+                        let weak_clone = weak.clone();
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(ui) = weak_clone.upgrade() {
+                                process_file(&path, ui);
+                            }
+                        });
+                    }
                 }
+                DragFinish(hdrop);
             }
-            DragFinish(hdrop);
+            return 0; // 드롭 처리 완료 시 0 반환
         }
-        return 0;
+        _ => {}
     }
+    
+    // 원래 윈도우 프로시저 호출 (체이닝)
     unsafe {
-        CallWindowProcW(ORIGINAL_WNDPROC, hwnd, msg, wparam, lparam)
+        if let Some(orig) = ORIGINAL_WNDPROC {
+            CallWindowProcW(Some(orig), hwnd, msg, wparam, lparam)
+        } else {
+            windows_sys::Win32::UI::WindowsAndMessaging::DefWindowProcW(hwnd, msg, wparam, lparam)
+        }
     }
 }
 
@@ -123,7 +137,7 @@ fn main() -> anyhow::Result<()> {
     let ui = AppWindow::new()?;
     let ui_handle = ui.as_weak();
 
-    // Set up global handle for WndProc
+    // 전역 핸들 설정
     let _ = APP_WINDOW_HANDLE.set(ui_handle.clone());
 
     ui.on_load_clicked({
@@ -140,34 +154,61 @@ fn main() -> anyhow::Result<()> {
         }
     });
 
-    ui.on_setup_hook({
-        let ui_handle = ui_handle.clone();
-        move || {
-            #[cfg(target_os = "windows")]
-            {
-                if let Some(ui) = ui_handle.upgrade() {
-                    use raw_window_handle::HasWindowHandle;
-                    let window_handle = ui.window().window_handle();
-                    
-                    if let Ok(handle) = window_handle.window_handle() {
-                        let raw_handle = handle.as_raw();
-                        if let raw_window_handle::RawWindowHandle::Win32(h) = raw_handle {
-                            let hwnd = h.hwnd.get() as HWND;
-                            unsafe {
-                                DragAcceptFiles(hwnd, 1);
-                                ORIGINAL_WNDPROC = core::mem::transmute(SetWindowLongPtrW(
-                                    hwnd,
-                                    GWLP_WNDPROC,
-                                    wnd_proc as *const () as isize,
-                                ));
+    // 1. 창 띄우기 (HWND 생성)
+    ui.show()?;
+
+    // 2. Windows API 후킹 (Win32 핸들 추출 로직 개선)
+    #[cfg(target_os = "windows")]
+    {
+        use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+        
+        let window_handle = ui.window().window_handle();
+        // HasWindowHandle trait의 window_handle() 호출
+        match window_handle.window_handle() {
+            Ok(handle) => {
+                // 핸들의 Raw 타입 확인
+                match handle.as_raw() {
+                    RawWindowHandle::Win32(handle) => {
+                        let hwnd = handle.hwnd.get() as HWND;
+                        println!("HWND 획득 성공: {:?}", hwnd);
+
+                        unsafe {
+                            // 관리자 권한 UIPI 우회 설정
+                            ChangeWindowMessageFilterEx(hwnd, WM_DROPFILES, MSGFLT_ALLOW, std::ptr::null_mut());
+                            ChangeWindowMessageFilterEx(hwnd, 0x0049, MSGFLT_ALLOW, std::ptr::null_mut()); 
+                            
+                            // 드래그 앤 드롭 활성화
+                            DragAcceptFiles(hwnd, 1);
+                            println!("DragAcceptFiles 설정 완료");
+
+                            // WndProc 교체 (Subclassing)
+                            let prev_proc = SetWindowLongPtrW(
+                                hwnd,
+                                GWLP_WNDPROC,
+                                wnd_proc as *const () as isize,
+                            );
+                            
+                            if prev_proc == 0 {
+                                println!("경고: SetWindowLongPtrW가 0을 반환했습니다");
+                            } else {
+                                println!("WndProc 후킹 성공. 이전 주소: {:?}", prev_proc);
+                                type WndProcFn = unsafe extern "system" fn(HWND, u32, WPARAM, LPARAM) -> LRESULT;
+                                ORIGINAL_WNDPROC = Some(core::mem::transmute::<isize, WndProcFn>(prev_proc));
                             }
                         }
                     }
+                    _ => {
+                        println!("오류: Win32 핸들이 아닙니다.");
+                    }
                 }
             }
+            Err(e) => {
+                println!("오류: 윈도우 핸들을 가져올 수 없습니다. 상세: {:?}", e);
+            }
         }
-    });
+    }
 
-    ui.run()?;
+    println!("이벤트 루프 시작");
+    slint::run_event_loop()?;
     Ok(())
 }
