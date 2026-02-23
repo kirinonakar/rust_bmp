@@ -1,9 +1,14 @@
-use slint::ComponentHandle;
 use std::path::{Path, PathBuf};
 use std::fs::File;
 use std::io::{Write, BufWriter};
 use byteorder::{WriteBytesExt, LittleEndian};
 use image::{DynamicImage, GenericImageView};
+use slint::ComponentHandle;
+use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+use windows_sys::Win32::UI::Shell::{DragAcceptFiles, DragFinish, DragQueryFileW, HDROP};
+use windows_sys::Win32::UI::WindowsAndMessaging::{
+    CallWindowProcW, SetWindowLongPtrW, GWLP_WNDPROC, WM_DROPFILES, WNDPROC,
+};
 
 slint::include_modules!();
 
@@ -84,48 +89,84 @@ fn process_file(path_str: &str, handle: AppWindow) {
     }
 }
 
+use std::sync::OnceLock;
+static APP_WINDOW_HANDLE: OnceLock<slint::Weak<AppWindow>> = OnceLock::new();
+static mut ORIGINAL_WNDPROC: WNDPROC = None;
+
+unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    if msg == WM_DROPFILES {
+        let hdrop = wparam as HDROP;
+        let mut path_buf = [0u16; 512];
+        unsafe {
+            let count = DragQueryFileW(hdrop, 0, path_buf.as_mut_ptr(), 512);
+            if count > 0 {
+                let path = String::from_utf16_lossy(&path_buf[..count as usize]);
+                if let Some(weak) = APP_WINDOW_HANDLE.get() {
+                    let weak_clone = weak.clone();
+                    let _ = slint::invoke_from_event_loop(move || {
+                        if let Some(ui) = weak_clone.upgrade() {
+                            process_file(&path, ui);
+                        }
+                    });
+                }
+            }
+            DragFinish(hdrop);
+        }
+        return 0;
+    }
+    unsafe {
+        CallWindowProcW(ORIGINAL_WNDPROC, hwnd, msg, wparam, lparam)
+    }
+}
+
 fn main() -> anyhow::Result<()> {
     let ui = AppWindow::new()?;
     let ui_handle = ui.as_weak();
 
-    ui.on_file_dropped(move |path| {
-        if let Some(ui) = ui_handle.upgrade() {
-            process_file(&path, ui);
-        }
-    });
+    // Set up global handle for WndProc
+    let _ = APP_WINDOW_HANDLE.set(ui_handle.clone());
 
-    let ui_handle_for_load = ui.as_weak();
-    ui.on_load_clicked(move || {
-        if let Some(path) = rfd::FileDialog::new()
-            .add_filter("PNG Image", &["png"])
-            .pick_file() 
-        {
-            if let Some(ui) = ui_handle_for_load.upgrade() {
-                process_file(&path.to_string_lossy(), ui);
+    ui.on_load_clicked({
+        let ui_handle = ui_handle.clone();
+        move || {
+            if let Some(path) = rfd::FileDialog::new()
+                .add_filter("PNG Image", &["png"])
+                .pick_file() 
+            {
+                if let Some(ui) = ui_handle.upgrade() {
+                    process_file(&path.to_string_lossy(), ui);
+                }
             }
         }
     });
 
-    // We need to use Window::on_event or Window::on_file_dropped if available in this Slint version.
-    // Actually, Slint's Window has a `window_event` callback or we can handle it at the platform level.
-    // However, Slint 1.x has a way to handle dropped files via the Window object directly in some platforms,
-    // but the most reliable way for a cross-platform app is to use the `window().on_mouse_input` etc?
-    // Wait, Slint has `WindowEvent::DroppedFile` in its event loop.
-    
-    // For simplicity, I'll use a timer or a dedicated thread if needed, but let's try to 
-    // hook into the Window's event loop if possible. 
-    // In Slint, you can use `ui.window().on_event(...)` in recent versions.
-    
-    /*
-    let ui_handle_for_events = ui.as_weak();
-    ui.window().on_event(move |event| {
-        if let slint::platform::WindowEvent::DroppedFile(path) = event {
-            if let Some(ui) = ui_handle_for_events.upgrade() {
-                process_file(&path.to_string_lossy(), ui);
+    ui.on_setup_hook({
+        let ui_handle = ui_handle.clone();
+        move || {
+            #[cfg(target_os = "windows")]
+            {
+                if let Some(ui) = ui_handle.upgrade() {
+                    use raw_window_handle::HasWindowHandle;
+                    let window_handle = ui.window().window_handle();
+                    
+                    if let Ok(handle) = window_handle.window_handle() {
+                        let raw_handle = handle.as_raw();
+                        if let raw_window_handle::RawWindowHandle::Win32(h) = raw_handle {
+                            let hwnd = h.hwnd.get() as HWND;
+                            unsafe {
+                                DragAcceptFiles(hwnd, 1);
+                                ORIGINAL_WNDPROC = core::mem::transmute(SetWindowLongPtrW(
+                                    hwnd,
+                                    GWLP_WNDPROC,
+                                    wnd_proc as *const () as isize,
+                                ));
+                            }
+                        }
+                    }
+                }
             }
         }
     });
-    */
 
     ui.run()?;
     Ok(())

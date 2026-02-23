@@ -8,9 +8,19 @@ export component AppWindow inherits Window {
 
     callback file-dropped(string);
     callback load-clicked();
+    callback setup-hook();
     in-out property <string> status-text: "Drag and Drop a PNG file here";
     in-out property <string> sub-status: "Output will be a 32-bit BMP with Alpha Channel";
     in-out property <bool> is-hovering: false;
+
+    init-timer := Timer {
+        interval: 500ms;
+        running: true;
+        triggered => {
+            root.setup-hook();
+            self.running = false;
+        }
+    }
 
     VerticalLayout {
         padding: 40px;

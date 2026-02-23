@@ -4059,9 +4059,11 @@ dependencies = [
  "anyhow",
  "byteorder",
  "image",
+ "raw-window-handle",
  "rfd",
  "slint",
  "slint-build",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4362,6 +4364,7 @@ dependencies = [
  "num-traits",
  "once_cell",
  "pin-weak",
+ "raw-window-handle",
  "slint-macros",
  "unicode-segmentation",
  "vtable",

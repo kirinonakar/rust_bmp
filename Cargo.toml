@@ -4,12 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-slint = "1.9.0"
+slint = { version = "1.9.0", features = ["raw-window-handle-06"] }
 image = "0.25.1"
 anyhow = "1.0"
 byteorder = "1.5"
 
 rfd = "0.14"
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell", "Win32_Graphics_Gdi"] }
+raw-window-handle = "0.6"
 
 [build-dependencies]
 slint-build = "1.9.0"
