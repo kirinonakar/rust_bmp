@@ -15,3 +15,4 @@ raw-window-handle = "0.6"
 
 [build-dependencies]
 slint-build = "1.9.0"
+winresource = "0.1"
