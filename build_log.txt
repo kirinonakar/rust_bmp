@@ -1,0 +1,14 @@
+   Compiling rust_bmp v0.1.0 (D:\ASUNA\Tools\Visual_studio\rust_bmp)
+error[E0599]: no method named `get_width` found for struct `AppWindow` in the current scope
+    --> src\main.rs:198:55
+     |
+ 198 | ...                   let window_width = ui.get_width();
+     |                                             ^^^^^^^^^ method not found in `AppWindow`
+     |
+    ::: D:\ASUNA\Tools\Visual_studio\rust_bmp\target\debug\build\rust_bmp-446002117729fb0f\out\main.rs:7504:6
+     |
+7504 |      pub struct r#AppWindow (sp :: VRc < sp :: ItemTreeVTable , InnerAppWindow >) ;
+     |      ---------------------- method `get_width` not found for this struct
+
+For more information about this error, try `rustc --explain E0599`.
+error: could not compile `rust_bmp` (bin "rust_bmp") due to 1 previous error
