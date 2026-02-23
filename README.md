@@ -2,6 +2,11 @@
 
 이 프로그램은 배경이 투명한 PNG 파일을 **코에이(Koei) 삼국지 FaceTool** 및 구형 게임 엔진에서 완벽하게 인식하는 **알파 채널 포함 32비트 BMP**로 변환해주는 도구입니다.
 
+## 📸 미리보기
+
+| 단일 모드 | 배경 결합 모드 |
+| :---: | :---: |
+| ![screenshot1](screenshot1.png) | ![screenshot2](screenshot2.png) |
 
 ## ✨ 주요 기능
 
