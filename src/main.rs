@@ -4,12 +4,15 @@ use std::io::{Write, BufWriter};
 use byteorder::{WriteBytesExt, LittleEndian};
 use image::{DynamicImage, GenericImageView};
 use slint::ComponentHandle;
-use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM, GetLastError};
 use windows_sys::Win32::UI::Shell::{DragAcceptFiles, DragFinish, DragQueryFileW, HDROP};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CallWindowProcW, ChangeWindowMessageFilterEx, SetWindowLongPtrW, GWLP_WNDPROC, MSGFLT_ALLOW,
-    WM_DROPFILES, WNDPROC,
+    CallWindowProcW, ChangeWindowMessageFilterEx, EnumThreadWindows, GetForegroundWindow, 
+    SetWindowLongPtrW, GWLP_WNDPROC, MSGFLT_ALLOW, WM_DROPFILES, WNDPROC,
 };
+use windows_sys::Win32::System::Threading::GetCurrentThreadId;
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::GetActiveWindow;
+use windows_sys::Win32::System::Ole::RevokeDragDrop;
 use std::sync::OnceLock;
 
 slint::include_modules!();
@@ -133,6 +136,14 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
     }
 }
 
+unsafe extern "system" fn enum_windows_callback(hwnd: HWND, lparam: LPARAM) -> i32 {
+    let out_hwnd = lparam as *mut HWND;
+    unsafe {
+        *out_hwnd = hwnd;
+    }
+    0 // 첫 번째로 찾은 창에서 중단
+}
+
 fn main() -> anyhow::Result<()> {
     let ui = AppWindow::new()?;
     let ui_handle = ui.as_weak();
@@ -162,49 +173,79 @@ fn main() -> anyhow::Result<()> {
     {
         use raw_window_handle::{HasWindowHandle, RawWindowHandle};
         
+        // 창이 뜬 직후에는 백엔드에 따라 핸들이 바로 준비되지 않을 수 있으므로 충분히 대기
+        std::thread::sleep(std::time::Duration::from_millis(200));
+
         let window_handle = ui.window().window_handle();
-        // HasWindowHandle trait의 window_handle() 호출
-        match window_handle.window_handle() {
-            Ok(handle) => {
-                // 핸들의 Raw 타입 확인
-                match handle.as_raw() {
-                    RawWindowHandle::Win32(handle) => {
-                        let hwnd = handle.hwnd.get() as HWND;
-                        println!("HWND 획득 성공: {:?}", hwnd);
+        let mut hwnd: HWND = std::ptr::null_mut();
 
-                        unsafe {
-                            // 관리자 권한 UIPI 우회 설정
-                            ChangeWindowMessageFilterEx(hwnd, WM_DROPFILES, MSGFLT_ALLOW, std::ptr::null_mut());
-                            ChangeWindowMessageFilterEx(hwnd, 0x0049, MSGFLT_ALLOW, std::ptr::null_mut()); 
-                            
-                            // 드래그 앤 드롭 활성화
-                            DragAcceptFiles(hwnd, 1);
-                            println!("DragAcceptFiles 설정 완료");
+        // 시도 1: Slint 표준 연동 방식
+        if let Ok(handle) = window_handle.window_handle() {
+            if let RawWindowHandle::Win32(h) = handle.as_raw() {
+                hwnd = h.hwnd.get() as HWND;
+                println!("Slint를 통해 HWND 획득 성공: {:?}", hwnd);
+            }
+        }
 
-                            // WndProc 교체 (Subclassing)
-                            let prev_proc = SetWindowLongPtrW(
-                                hwnd,
-                                GWLP_WNDPROC,
-                                wnd_proc as *const () as isize,
-                            );
-                            
-                            if prev_proc == 0 {
-                                println!("경고: SetWindowLongPtrW가 0을 반환했습니다");
-                            } else {
-                                println!("WndProc 후킹 성공. 이전 주소: {:?}", prev_proc);
-                                type WndProcFn = unsafe extern "system" fn(HWND, u32, WPARAM, LPARAM) -> LRESULT;
-                                ORIGINAL_WNDPROC = Some(core::mem::transmute::<isize, WndProcFn>(prev_proc));
-                            }
-                        }
-                    }
-                    _ => {
-                        println!("오류: Win32 핸들이 아닙니다.");
-                    }
+        // 시도 2: EnumThreadWindows (현재 스레드에 속한 창 찾기 - 가장 확실함)
+        if hwnd.is_null() {
+            let thread_id = unsafe { GetCurrentThreadId() };
+            unsafe {
+                EnumThreadWindows(thread_id, Some(enum_windows_callback), &mut hwnd as *mut HWND as LPARAM);
+            }
+            if !hwnd.is_null() {
+                println!("EnumThreadWindows를 통해 HWND 획득: {:?}", hwnd);
+            }
+        }
+
+        // 시도 3: Fallback - GetActiveWindow
+        if hwnd.is_null() {
+            hwnd = unsafe { GetActiveWindow() };
+            if !hwnd.is_null() {
+                println!("Fallback(GetActiveWindow)을 통해 HWND 획득: {:?}", hwnd);
+            }
+        }
+
+        // 시도 4: Fallback - GetForegroundWindow
+        if hwnd.is_null() {
+            hwnd = unsafe { GetForegroundWindow() };
+            if !hwnd.is_null() {
+                println!("Fallback(GetForegroundWindow)을 통해 HWND 획득: {:?}", hwnd);
+            }
+        }
+
+        if !hwnd.is_null() {
+            unsafe {
+                // 핵심: Winit이 기본으로 등록한 OLE 드래그 앤 드롭을 해제합니다.
+                RevokeDragDrop(hwnd);
+
+                // 관리자 권한 UIPI 우회 설정
+                ChangeWindowMessageFilterEx(hwnd, WM_DROPFILES, MSGFLT_ALLOW, std::ptr::null_mut());
+                ChangeWindowMessageFilterEx(hwnd, 0x0049, MSGFLT_ALLOW, std::ptr::null_mut()); // WM_COPYGLOBALDATA
+                ChangeWindowMessageFilterEx(hwnd, 0x004A, MSGFLT_ALLOW, std::ptr::null_mut()); // WM_COPYDATA
+                
+                // 드래그 앤 드롭 활성화
+                DragAcceptFiles(hwnd, 1);
+                println!("DragAcceptFiles 설정 완료");
+
+                // WndProc 교체 (Subclassing)
+                let prev_proc = SetWindowLongPtrW(
+                    hwnd,
+                    GWLP_WNDPROC,
+                    wnd_proc as *const () as isize,
+                );
+                
+                if prev_proc == 0 {
+                    let err = GetLastError();
+                    println!("경고: SetWindowLongPtrW가 0을 반환했습니다. 에러 코드: {}", err);
+                } else {
+                    println!("WndProc 후킹 성공. 이전 주소: 0x{:X}", prev_proc);
+                    type WndProcFn = unsafe extern "system" fn(HWND, u32, WPARAM, LPARAM) -> LRESULT;
+                    ORIGINAL_WNDPROC = Some(core::mem::transmute::<isize, WndProcFn>(prev_proc));
                 }
             }
-            Err(e) => {
-                println!("오류: 윈도우 핸들을 가져올 수 없습니다. 상세: {:?}", e);
-            }
+        } else {
+            println!("오류: 윈도우 핸들을 시도했으나 모든 방법이 실패했습니다.");
         }
     }
 
