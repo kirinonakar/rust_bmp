@@ -4,8 +4,8 @@ export component AppWindow inherits Window {
     title: "Alpha PNG to 32bit BMP Converter";
     icon: @image-url("../app.ico");
     width: 650px;
-    height: 450px;
-    background: @linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    height: 400px;
+    background: @linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
 
     callback file-dropped(string, bool); // path, is_right_side
     callback load-clicked();
@@ -14,7 +14,7 @@ export component AppWindow inherits Window {
     in-out property <string> status-text: "PNG 파일을 여기로 드래그 하세요";
     in-out property <string> sub-status: "알파 채널이 포함된 32비트 BMP로 변환됩니다";
     in-out property <bool> is-hovering: false;
-    in-out property <bool> with-background: false;
+    in-out property <bool> with-background: true;
     
     // Properties for combined mode/previews
     in-out property <string> bg-path: "";
@@ -25,24 +25,25 @@ export component AppWindow inherits Window {
 
     VerticalLayout {
         padding: 30px;
+        padding-top: 15px;
         spacing: 15px;
-        alignment: center;
+        alignment: start;
 
         // Title
         Text {
             text: "PNG to BMP Converter";
             font-size: 28px;
             font-weight: 800;
-            color: #e94560;
+            color: #1a73e8;
             horizontal-alignment: center;
         }
 
         // CheckBox with brighter Background for better visibility
         Rectangle {
-            background: #ffffff25;
+            background: #ffffff;
             border-radius: 8px;
             border-width: 1px;
-            border-color: #ffffff30;
+            border-color: #dee2e6;
             HorizontalLayout {
                 padding: 10px;
                 padding-left: 15px;
@@ -54,7 +55,7 @@ export component AppWindow inherits Window {
                 }
                 Text {
                     text: "배경 있음 (파일 2개 합치기)";
-                    color: with-background ? #e94560 : #ffffff;
+                    color: with-background ? #1a73e8 : #495057;
                     vertical-alignment: center;
                     font-size: 16px;
                     font-weight: 800;
@@ -65,10 +66,10 @@ export component AppWindow inherits Window {
 
         if !with-background : Rectangle {
             height: 180px;
-            background: is-hovering ? #ffffff10 : #ffffff05;
+            background: is-hovering ? #e7f5ff : #ffffff;
             border-radius: 16px;
             border-width: 2px;
-            border-color: is-hovering ? #e94560 : #ffffff20;
+            border-color: is-hovering ? #1a73e8 : #dee2e6;
             animate background { duration: 200ms; }
             animate border-color { duration: 200ms; }
 
@@ -77,7 +78,7 @@ export component AppWindow inherits Window {
                 width: 100%;
                 height: 100%;
                 image-fit: contain;
-                opacity: 0.2;
+                opacity: 0.1;
             }
 
             VerticalLayout {
@@ -87,14 +88,14 @@ export component AppWindow inherits Window {
                 Text {
                     text: status-text;
                     font-size: 16px;
-                    color: #ffffff;
+                    color: #212529;
                     horizontal-alignment: center;
                 }
 
                 Text {
                     text: sub-status;
                     font-size: 13px;
-                    color: #ffffff80;
+                    color: #868e96;
                     horizontal-alignment: center;
                 }
             }
@@ -106,17 +107,18 @@ export component AppWindow inherits Window {
 
             // Left side: Background (RGB)
             Rectangle {
-                background: #ffffff05;
+                width: 285px;
+                background: #ffffff;
                 border-radius: 12px;
                 border-width: 2px;
-                border-color: bg-path != "" ? #e94560 : #ffffff20;
+                border-color: bg-path != "" ? #1a73e8 : #dee2e6;
                 
                 Image {
                     source: bg-preview;
                     width: 100%;
                     height: 100%;
                     image-fit: contain;
-                    opacity: 0.4;
+                    opacity: 0.6;
                 }
 
                 VerticalLayout {
@@ -125,14 +127,14 @@ export component AppWindow inherits Window {
                     Text {
                         text: "1. 배경 있는 PNG";
                         font-size: 14px;
-                        color: #e94560;
+                        color: #1a73e8;
                         horizontal-alignment: center;
                         font-weight: 700;
                     }
                     Text {
                         text: bg-path == "" ? "여기에 드롭" : bg-path;
                         font-size: 12px;
-                        color: #ffffff;
+                        color: #212529;
                         horizontal-alignment: center;
                         wrap: word-wrap;
                         overflow: elide;
@@ -140,13 +142,13 @@ export component AppWindow inherits Window {
                     if bg-path != "" : Text {
                         text: "(PNG, JPG, BMP 지원)";
                         font-size: 10px;
-                        color: #ffffff60;
+                        color: #868e96;
                         horizontal-alignment: center;
                     }
                     if bg-path == "" : Text {
                         text: "(PNG, JPG, BMP 가능)";
                         font-size: 10px;
-                        color: #ffffff40;
+                        color: #adb5bd;
                         horizontal-alignment: center;
                     }
                 }
@@ -154,17 +156,18 @@ export component AppWindow inherits Window {
 
             // Right side: Alpha
             Rectangle {
-                background: #ffffff05;
+                width: 285px;
+                background: #ffffff;
                 border-radius: 12px;
                 border-width: 2px;
-                border-color: alpha-path != "" ? #e94560 : #ffffff20;
+                border-color: alpha-path != "" ? #1a73e8 : #dee2e6;
 
                 Image {
                     source: alpha-preview;
                     width: 100%;
                     height: 100%;
                     image-fit: contain;
-                    opacity: 0.4;
+                    opacity: 0.6;
                 }
 
                 VerticalLayout {
@@ -173,14 +176,14 @@ export component AppWindow inherits Window {
                     Text {
                         text: "2. 투명한 PNG";
                         font-size: 14px;
-                        color: #e94560;
+                        color: #1a73e8;
                         horizontal-alignment: center;
                         font-weight: 700;
                     }
                     Text {
                         text: alpha-path == "" ? "여기에 드롭" : alpha-path;
                         font-size: 12px;
-                        color: #ffffff;
+                        color: #212529;
                         horizontal-alignment: center;
                         wrap: word-wrap;
                         overflow: elide;
@@ -188,22 +191,54 @@ export component AppWindow inherits Window {
                     if alpha-path != "" : Text {
                         text: "(알파 소스)";
                         font-size: 10px;
-                        color: #ffffff60;
+                        color: #868e96;
                         horizontal-alignment: center;
                     }
                 }
             }
         }
 
-        if with-background : Button {
-            text: "합쳐서 BMP로 저장";
-            enabled: bg-path != "" && alpha-path != "";
-            clicked => { root.combine-clicked(); }
+        // Use a consistent button width
+        property <length> btn-width: 590px;
+        property <length> btn-height: 40px;
+
+        if with-background : Rectangle {
+            background: (bg-path != "" && alpha-path != "") ? (save-touch.pressed ? #0d47a1 : (save-touch.has-hover ? #4285f4 : #1a73e8)) : #e0e0e0;
+            border-radius: 8px;
+            height: btn-height;
+            width: btn-width;
+            animate background { duration: 150ms; }
+            
+            Text {
+                text: "합쳐서 BMP로 저장";
+                color: (bg-path != "" && alpha-path != "") ? white : #9e9e9e;
+                font-weight: 800;
+                font-size: 15px;
+            }
+            
+            save-touch := TouchArea {
+                enabled: bg-path != "" && alpha-path != "";
+                clicked => { root.combine-clicked(); }
+            }
         }
 
-        if !with-background : Button {
-            text: "PNG 파일 열기";
-            clicked => { root.load-clicked(); }
+        if !with-background : Rectangle {
+            background: load-touch.pressed ? #0d47a1 : (load-touch.has-hover ? #4285f4 : #1a73e8);
+            border-radius: 8px;
+            height: btn-height;
+            width: btn-width;
+            animate background { duration: 150ms; }
+            
+            Text {
+                text: "PNG 파일 열기";
+                color: white;
+                font-weight: 800;
+                font-size: 15px;
+            }
+            
+            load-touch := TouchArea {
+                clicked => { root.load-clicked(); }
+            }
         }
     }
 }
