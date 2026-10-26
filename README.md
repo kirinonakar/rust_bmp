@@ -72,3 +72,44 @@
 
 ---
 **Note**: 포토샵에서 수동으로 채널 작업을 할 필요 없이, 단일 파일 변환이나 두 파일 결합을 통해 바로 게임에 적용 가능한 BMP를 만들어줍니다.
+
+---
+
+## 📜 License & Third-Party Notices
+
+### 1. Project License
+
+This project is distributed under the **MIT License**. See the [LICENSE](LICENSE) file for the full text.
+
+### 2. Slint UI Toolkit
+
+The graphical user interface of this application is built with [Slint](https://slint.dev) (version 1.15.1).
+Slint is Copyright © [SixtyFPS GmbH](https://slint.dev). Slint is triple-licensed — you may use it under **any** of the following licenses, at your choice:
+
+| License | Notes |
+| :--- | :--- |
+| [Slint Royalty-free Desktop, Mobile, and Web Applications License](https://github.com/slint-ui/slint/blob/master/LICENSES/LicenseRef-Slint-Royalty-free-2.0.md) | Free of charge for desktop, mobile, and web applications, provided the attribution requirements are met. Does not cover embedded systems. |
+| [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.html) | Free of charge for open-source projects, including embedded systems. |
+| [Commercial License](https://slint.dev/pricing) | For proprietary and/or embedded use without attribution obligations. |
+
+This application uses the **Slint Royalty-free** license option. The attribution obligations of that license are fulfilled as follows:
+
+- The Slint attribution badge is displayed at the bottom of this page, where the binaries are downloaded
+  ([GitHub Releases](https://github.com/kirinonakar/rust_bmp/releases)), in such a way that it can be easily found by any visitor.
+- All copyright notices, disclaimers of warranty, and limitations of liability contained in the source code form
+  of Slint are retained and left unmodified.
+
+Full license texts and FAQ:
+
+- Slint LICENSE: <https://github.com/slint-ui/slint/blob/master/LICENSE.md>
+- Slint Licensing FAQ: <https://github.com/slint-ui/slint/blob/master/FAQ.md>
+
+### 3. Attribution Badge
+
+[![Made with Slint](https://slint.dev/logo/MadeWithSlint-logo-light.svg#gh-light-mode-only)](https://slint.dev)
+[![Made with Slint](https://slint.dev/logo/MadeWithSlint-logo-dark.svg#gh-dark-mode-only)](https://slint.dev)
+
+### 4. Other Dependencies
+
+All other third-party crates (`image`, `anyhow`, `byteorder`, `rfd`, `windows-sys`, `raw-window-handle`)
+remain under their respective licenses; refer to `Cargo.lock` and each crate's repository for details.
